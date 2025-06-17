@@ -17,16 +17,20 @@
   <input type="file" id="fileInput" accept="application/pdf">
   <div id="output"></div>
 
-  <script>
+<script>
   const foodKeywords = ["WOOLWORTHS", "COLES", "CAFE", "MCDONALDS", "STARBUCKS", "UBER EATS"];
   const travelKeywords = ["AMPOL", "7-ELEVEN"];
 
-  function parseTransaction(line) {
+  function extractAmountFromBoldItems(items) {
+    const boldAmounts = items
+      .filter(item => item.fontName?.toUpperCase().includes("BOLD") && /^\d+(\.\d{2})?$/.test(item.str))
+      .map(item => parseFloat(item.str));
+    return boldAmounts.length ? boldAmounts[boldAmounts.length - 1] : 0;
+  }
+
+  function parseTransaction(line, amount) {
     const firstWord = line.split(" ")[0];
-    const match = line.match(/\$[\d,]+\.\d{2}/g); // Match all dollar amounts
-    const lastAmount = match ? match[match.length - 1] : null;
-    const amount = lastAmount ? parseFloat(lastAmount.replace(/[^0-9.]/g, '')) : 0;
-    return { display: `${firstWord} - ${lastAmount || "N/A"}`, amount };
+    return { display: `${firstWord} - $${amount.toFixed(2)}`, amount };
   }
 
   document.getElementById('fileInput').addEventListener('change', async function (e) {
@@ -37,32 +41,43 @@
     reader.onload = async function () {
       const typedArray = new Uint8Array(reader.result);
       const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
-      let fullText = "";
+      let food = [], travel = [], other = [];
+      let totalFood = 0, totalTravel = 0, totalOther = 0;
 
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        const pageText = content.items.map(item => item.str).join("\n");
-        fullText += pageText + "\n";
-      }
+        const items = content.items;
+        const textByLine = [];
 
-      const lines = fullText.split(/\n+/);
-      const food = [], travel = [], other = [];
-      let totalFood = 0, totalTravel = 0, totalOther = 0;
+        // Group items by vertical position (approximate lines)
+        let lastY = null, currentLine = [];
+        for (const item of items) {
+          if (lastY !== null && Math.abs(item.transform[5] - lastY) > 2) {
+            textByLine.push(currentLine);
+            currentLine = [];
+          }
+          currentLine.push(item);
+          lastY = item.transform[5];
+        }
+        if (currentLine.length) textByLine.push(currentLine);
 
-      for (const line of lines) {
-        const upperLine = line.toUpperCase();
-        const { display, amount } = parseTransaction(line);
+        for (const lineItems of textByLine) {
+          const lineText = lineItems.map(it => it.str).join(" ");
+          const upperLine = lineText.toUpperCase();
+          const amount = extractAmountFromBoldItems(lineItems);
+          const { display } = parseTransaction(lineText, amount);
 
-        if (foodKeywords.some(k => upperLine.includes(k))) {
-          food.push(display);
-          totalFood += amount;
-        } else if (travelKeywords.some(k => upperLine.includes(k))) {
-          travel.push(display);
-          totalTravel += amount;
-        } else {
-          other.push(display);
-          totalOther += amount;
+          if (foodKeywords.some(k => upperLine.includes(k))) {
+            food.push(display);
+            totalFood += amount;
+          } else if (travelKeywords.some(k => upperLine.includes(k))) {
+            travel.push(display);
+            totalTravel += amount;
+          } else {
+            other.push(display);
+            totalOther += amount;
+          }
         }
       }
 
