@@ -18,65 +18,64 @@
   <div id="output"></div>
 
   <script>
-document.getElementById('fileInput').addEventListener('change', async function (e) {
-  const file = e.target.files[0];                                // (#) Get the uploaded PDF file
-  if (!file) return;                                             // (#) Exit if no file selected
-
-  const reader = new FileReader();                               // (#) Create a file reader to read the PDF
-  reader.onload = async function () {
-    const typedArray = new Uint8Array(reader.result);            // (#) Convert PDF binary data to Uint8Array
-    const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;  // (#) Load PDF using pdf.js
-
-    // (#) Define keyword arrays for category matching
     const foodKeywords = ["WOOLWORTHS", "COLES", "CAFE", "MCDONALDS", "STARBUCKS", "UBER EATS"];
     const travelKeywords = ["AMPOL", "7-ELEVEN"];
 
-    // (#) Arrays to hold categorized lines
-    const food = [], travel = [], other = [];
+    document.getElementById('fileInput').addEventListener('change', async function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
 
-    for (let i = 1; i <= pdf.numPages; i++) {                    // (#) Loop through each page of the PDF
-      const page = await pdf.getPage(i);                         // (#) Get current page
-      const content = await page.getTextContent();               // (#) Extract text content from page
+      const reader = new FileReader();
+      reader.onload = async function () {
+        const typedArray = new Uint8Array(reader.result);
+        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+        let fullText = "";
 
-      const lines = {};                                          // (#) Object to group items by Y position (i.e. same line)
-
-      for (const item of content.items) {                        // (#) Loop through text items on the page
-        const y = Math.round(item.transform[5]);                 // (#) Get Y coordinate (rounded to group nearby lines)
-        if (!lines[y]) lines[y] = [];                            // (#) Initialize line group if needed
-        lines[y].push(item);                                     // (#) Add text item to the corresponding line
-      }
-
-      for (const items of Object.values(lines)) {                // (#) Loop through each line (grouped by Y)
-        const lineText = items.map(it => it.str).join(" ").toUpperCase();  // (#) Join all words into one string and uppercase for matching
-
-        const amountItem = items.find(it => {                    // (#) Look for the bold number that looks like a money amount
-          return /^\d{1,4}(\.\d{2})?$/.test(it.str) &&           // (#) Matches numbers like 29.99 or 150.00
-                 it.fontName.toLowerCase().includes("bold");     // (#) Font name must include "bold"
-        });
-
-        const amount = amountItem ? amountItem.str : "—";        // (#) Use matched amount or placeholder if not found
-
-        // (#) Check which category the line belongs to based on keywords
-        if (foodKeywords.some(k => lineText.includes(k))) {
-          food.push(`${lineText} — $${amount}`);                 // (#) Add to Food category
-        } else if (travelKeywords.some(k => lineText.includes(k))) {
-          travel.push(`${lineText} — $${amount}`);               // (#) Add to Travel category
-        } else {
-          other.push(`${lineText} — $${amount}`);                // (#) Add to Other category
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join("\n");
+          fullText += pageText + "\n";
         }
-      }
-    }
 
-    // (#) Display results in the HTML
-    document.getElementById('output').innerHTML = `
-      <div class="category"><h2>🍔 Food</h2><ul>${food.map(item => `<li>${item}</li>`).join('')}</ul></div>
-      <div class="category"><h2>🚗 Travel</h2><ul>${travel.map(item => `<li>${item}</li>`).join('')}</ul></div>
-      <div class="category"><h2>📦 Other</h2><ul>${other.map(item => `<li>${item}</li>`).join('')}</ul></div>
-    `;
-  };
+        function extractAmount(line) {
+		const matches = line.match(/\d{1,3}(?:,\d{3})*(?:\.\d{2})?/g); // match numbers like 1,234.56 or 123.45
+		return matches ? matches[matches.length - 1] : "N/A"; // get last match (usually the cost)
+		}
 
-  reader.readAsArrayBuffer(file);                                // (#) Read the uploaded PDF file as a binary buffer
-});
-</script>
+		const food = [], travel = [], other = [];
+
+		for (const line of lines) {
+		  const upperLine = line.toUpperCase();
+		  const amount = extractAmount(line);
+		  const displayLine = `${line} - $${amount}`;
+
+		  if (foodKeywords.some(k => upperLine.includes(k))) {
+			food.push(displayLine);
+		  } else if (travelKeywords.some(k => upperLine.includes(k))) {
+			travel.push(displayLine);
+		  } else {
+			other.push(displayLine);
+		  }
+		}
+
+        document.getElementById('output').innerHTML = `
+          <div class="category">
+            <h2>🍔 Food</h2>
+            <ul>${food.map(item => `<li>${item}</li>`).join('')}</ul>
+          </div>
+          <div class="category">
+            <h2>🚗 Travel</h2>
+            <ul>${travel.map(item => `<li>${item}</li>`).join('')}</ul>
+          </div>
+          <div class="category">
+            <h2>📦 Other</h2>
+            <ul>${other.map(item => `<li>${item}</li>`).join('')}</ul>
+          </div>
+        `;
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
 </body>
 </html>
