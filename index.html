@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Amex Analyzer</title>
+  <title>Waremone.io</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
@@ -13,94 +13,70 @@
   </style>
 </head>
 <body>
-  <h1>WareMone</h1>
+  <h1>Waremone.io</h1>
   <input type="file" id="fileInput" accept="application/pdf">
   <div id="output"></div>
 
-<script>
-  const foodKeywords = ["WOOLWORTHS", "COLES", "CAFE", "MCDONALDS", "STARBUCKS", "UBER EATS"];
-  const travelKeywords = ["AMPOL", "7-ELEVEN"];
+  <script>
+document.getElementById('fileInput').addEventListener('change', async function (e) {
+  const file = e.target.files[0];                                // (#) Get the uploaded PDF file
+  if (!file) return;                                             // (#) Exit if no file selected
 
-  function extractAmountFromBoldItems(items) {
-    const boldAmounts = items
-      .filter(item => item.fontName?.toUpperCase().includes("BOLD") && /^\d+(\.\d{2})?$/.test(item.str))
-      .map(item => parseFloat(item.str));
-    return boldAmounts.length ? boldAmounts[boldAmounts.length - 1] : 0;
-  }
+  const reader = new FileReader();                               // (#) Create a file reader to read the PDF
+  reader.onload = async function () {
+    const typedArray = new Uint8Array(reader.result);            // (#) Convert PDF binary data to Uint8Array
+    const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;  // (#) Load PDF using pdf.js
 
-  function parseTransaction(line, amount) {
-    const firstWord = line.split(" ")[0];
-    return { display: `${firstWord} - $${amount.toFixed(2)}`, amount };
-  }
+    // (#) Define keyword arrays for category matching
+    const foodKeywords = ["WOOLWORTHS", "COLES", "CAFE", "MCDONALDS", "STARBUCKS", "UBER EATS"];
+    const travelKeywords = ["AMPOL", "7-ELEVEN"];
 
-  document.getElementById('fileInput').addEventListener('change', async function (e) {
-    const file = e.target.files[0];
-    if (!file) return;
+    // (#) Arrays to hold categorized lines
+    const food = [], travel = [], other = [];
 
-    const reader = new FileReader();
-    reader.onload = async function () {
-      const typedArray = new Uint8Array(reader.result);
-      const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
-      let food = [], travel = [], other = [];
-      let totalFood = 0, totalTravel = 0, totalOther = 0;
+    for (let i = 1; i <= pdf.numPages; i++) {                    // (#) Loop through each page of the PDF
+      const page = await pdf.getPage(i);                         // (#) Get current page
+      const content = await page.getTextContent();               // (#) Extract text content from page
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        const items = content.items;
-        const textByLine = [];
+      const lines = {};                                          // (#) Object to group items by Y position (i.e. same line)
 
-        // Group items by vertical position (approximate lines)
-        let lastY = null, currentLine = [];
-        for (const item of items) {
-          if (lastY !== null && Math.abs(item.transform[5] - lastY) > 2) {
-            textByLine.push(currentLine);
-            currentLine = [];
-          }
-          currentLine.push(item);
-          lastY = item.transform[5];
-        }
-        if (currentLine.length) textByLine.push(currentLine);
-
-        for (const lineItems of textByLine) {
-          const lineText = lineItems.map(it => it.str).join(" ");
-          const upperLine = lineText.toUpperCase();
-          const amount = extractAmountFromBoldItems(lineItems);
-          const { display } = parseTransaction(lineText, amount);
-
-          if (foodKeywords.some(k => upperLine.includes(k))) {
-            food.push(display);
-            totalFood += amount;
-          } else if (travelKeywords.some(k => upperLine.includes(k))) {
-            travel.push(display);
-            totalTravel += amount;
-          } else {
-            other.push(display);
-            totalOther += amount;
-          }
-        }
+      for (const item of content.items) {                        // (#) Loop through text items on the page
+        const y = Math.round(item.transform[5]);                 // (#) Get Y coordinate (rounded to group nearby lines)
+        if (!lines[y]) lines[y] = [];                            // (#) Initialize line group if needed
+        lines[y].push(item);                                     // (#) Add text item to the corresponding line
       }
 
-      document.getElementById('output').innerHTML = `
-        <div class="category">
-          <h2>🍔 Food</h2>
-          <ul>${food.map(item => `<li>${item}</li>`).join('')}</ul>
-          <strong>Total: $${totalFood.toFixed(2)}</strong>
-        </div>
-        <div class="category">
-          <h2>🚗 Travel</h2>
-          <ul>${travel.map(item => `<li>${item}</li>`).join('')}</ul>
-          <strong>Total: $${totalTravel.toFixed(2)}</strong>
-        </div>
-        <div class="category">
-          <h2>📦 Other</h2>
-          <ul>${other.map(item => `<li>${item}</li>`).join('')}</ul>
-          <strong>Total: $${totalOther.toFixed(2)}</strong>
-        </div>
-      `;
-    };
-    reader.readAsArrayBuffer(file);
-  });
+      for (const items of Object.values(lines)) {                // (#) Loop through each line (grouped by Y)
+        const lineText = items.map(it => it.str).join(" ").toUpperCase();  // (#) Join all words into one string and uppercase for matching
+
+        const amountItem = items.find(it => {                    // (#) Look for the bold number that looks like a money amount
+          return /^\d{1,4}(\.\d{2})?$/.test(it.str) &&           // (#) Matches numbers like 29.99 or 150.00
+                 it.fontName.toLowerCase().includes("bold");     // (#) Font name must include "bold"
+        });
+
+        const amount = amountItem ? amountItem.str : "—";        // (#) Use matched amount or placeholder if not found
+
+        // (#) Check which category the line belongs to based on keywords
+        if (foodKeywords.some(k => lineText.includes(k))) {
+          food.push(`${lineText} — $${amount}`);                 // (#) Add to Food category
+        } else if (travelKeywords.some(k => lineText.includes(k))) {
+          travel.push(`${lineText} — $${amount}`);               // (#) Add to Travel category
+        } else {
+          other.push(`${lineText} — $${amount}`);                // (#) Add to Other category
+        }
+      }
+    }
+
+    // (#) Display results in the HTML
+    document.getElementById('output').innerHTML = `
+      <div class="category"><h2>🍔 Food</h2><ul>${food.map(item => `<li>${item}</li>`).join('')}</ul></div>
+      <div class="category"><h2>🚗 Travel</h2><ul>${travel.map(item => `<li>${item}</li>`).join('')}</ul></div>
+      <div class="category"><h2>📦 Other</h2><ul>${other.map(item => `<li>${item}</li>`).join('')}</ul></div>
+    `;
+  };
+
+  reader.readAsArrayBuffer(file);                                // (#) Read the uploaded PDF file as a binary buffer
+});
 </script>
 </body>
 </html>
