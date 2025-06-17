@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Amex Analyzer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+    h1 { text-align: center; }
+    .category { margin-top: 20px; }
+    .category h2 { border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+    ul { list-style: none; padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Amex Statement Analyzer</h1>
+  <input type="file" id="fileInput" accept="application/pdf">
+  <div id="output"></div>
+
+  <script>
+    const foodKeywords = ["WOOLWORTHS", "COLES", "CAFE", "MCDONALDS", "STARBUCKS", "UBER EATS"];
+    const travelKeywords = ["AMPOL", "7-ELEVEN"];
+
+    document.getElementById('fileInput').addEventListener('change', async function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function () {
+        const typedArray = new Uint8Array(reader.result);
+        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+        let fullText = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join("\n");
+          fullText += pageText + "\n";
+        }
+
+        const lines = fullText.split(/\n+/);
+        const food = [], travel = [], other = [];
+
+        for (const line of lines) {
+          const upperLine = line.toUpperCase();
+          if (foodKeywords.some(k => upperLine.includes(k))) {
+            food.push(line);
+          } else if (travelKeywords.some(k => upperLine.includes(k))) {
+            travel.push(line);
+          } else {
+            other.push(line);
+          }
+        }
+
+        document.getElementById('output').innerHTML = `
+          <div class="category">
+            <h2>🍔 Food</h2>
+            <ul>${food.map(item => `<li>${item}</li>`).join('')}</ul>
+          </div>
+          <div class="category">
+            <h2>🚗 Travel</h2>
+            <ul>${travel.map(item => `<li>${item}</li>`).join('')}</ul>
+          </div>
+          <div class="category">
+            <h2>📦 Other</h2>
+            <ul>${other.map(item => `<li>${item}</li>`).join('')}</ul>
+          </div>
+        `;
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>
