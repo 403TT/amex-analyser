@@ -1,13 +1,13 @@
 const keywordGroups = {
-	fastfood: ["mcdonalds", "maccas", "kfc", "subway"],
+	maccas: ["mcdonalds", "maccas"],
 	groceries: ["coles", "woolworths", "woolies", "asian mart", "asian groceries"],
-	coffee: ["starbucks", "cafe"],
+	coffee: ["starbucks", "cafe", "coffee"],
 	travel: ["uber"],
 	car: ["petrol"],
 };
 
 const judgyResponses = {
-  fastfood: [
+  maccas: [
     "You spent $${amount} at McDonald's? Are you trying to speedrun diabetes?",
     "McDonald's again? At this point, they should name a seat after you."
   ],
@@ -29,10 +29,7 @@ const judgyResponses = {
 	"You spent $${amount} just to be stuck in traffic?"
   ],
   generic: [
-    "You really thought that was a good idea?",
-    "Your wallet just cried a little.",
-    "Interesting life choices you're making.",
-    "I can't even process that... financially or emotionally."
+    "Look, I don't really know what that is...but BAD CHOICE!"
   ]
 };
 
