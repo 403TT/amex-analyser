@@ -1,19 +1,32 @@
+const keywordGroups = {
+	fastfood: ["mcdonalds", "maccas", "kfc", "subway"],
+	groceries: ["coles", "woolworths", "woolies", "asian mart", "asian groceries"],
+	coffee: ["starbucks", "cafe"],
+	travel: ["uber"],
+	car: ["petrol"],
+};
+
 const judgyResponses = {
-  mcdonalds: [
+  fastfood: [
     "You spent $${amount} at McDonald's? Are you trying to speedrun diabetes?",
     "McDonald's again? At this point, they should name a seat after you."
   ],
-  starbucks: [
+  coffee: [
     "Another $${amount} for caffeine? You could've bought a kettle.",
-    "You’re not a main character just because you drink Starbucks."
+    "You’re not a main character just because you drink coffee."
   ],
-  uber: [
+  travel: [
     "You spent $${amount} on Uber? Ever heard of walking?",
     "Uber again? Might as well hire a chauffeur at this point."
   ],
-  woolworths: [
+  groceries: [
     "Groceries for $${amount}? Did you buy the entire store?",
-    "Woolworths? Hopefully you didn’t buy just snacks."
+    "Groceries? Hopefully you didn’t buy just snacks."
+  ],
+  car: [
+    "That’s not fuel — that’s liquid regret.",
+    "How much fuel do you need to avoid your responsibilities?",
+	"You spent $${amount} just to be stuck in traffic?"
   ],
   generic: [
     "You really thought that was a good idea?",
@@ -24,18 +37,19 @@ const judgyResponses = {
 };
 
 function analyseSpending(text) {
-  const amountMatch = text.match(/\$?(\d+(\.\d{1,2})?)/);
-  const amount = amountMatch ? amountMatch[1] : "??";
-  const lowerText = text.toLowerCase();
+  const amountMatch = text.match(/\$?(\d+(\.\d{1,2})?)/); // Use regex to analyse and extract numbers from text
+  const amount = amountMatch ? amountMatch[1] : "??"; // If a number is found, use it - Otherwise just put "??" as a placeholder
+  const lowerText = text.toLowerCase(); // Make the text lowercase so it's easier to match keywords
 
-  for (let keyword in judgyResponses) {
-    if (lowerText.includes(keyword)) {
-      const responses = judgyResponses[keyword];
-      return responses[Math.floor(Math.random() * responses.length)].replace("${amount}", amount);
+  for (let category in keywordGroups) { // Go through each keyword listed in judgyResponses
+	const keywords = keywordGroups[category];
+    if (keywords.some(word => lowerText.includes(word))) { // Check if the user's input includes one of those keywords
+      const responses = judgyResponses[category]; // Get the list of responses for that keyword
+      return responses[Math.floor(Math.random() * responses.length)].replace("${amount}", amount); // Output a random response and replace {amount} with user amount
     }
   }
-  const fallback = judgyResponses.generic;
-  return fallback[Math.floor(Math.random() * fallback.length)];
+  const fallback = judgyResponses.generic; // If no keywords matched, use a generic response
+  return fallback[Math.floor(Math.random() * fallback.length)]; // Output a random generic response
 }
 
 document.getElementById("analyseBtn").addEventListener("click", () => {
